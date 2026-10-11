@@ -1,0 +1,1 @@
+{"name":"cat-room","private":true,"license":"MIT","type":"module","scripts":{"test":"node --test","check":"node --check app.js && node --check state.js && node --check capture.js && node --check actions.js && node --check settings.js && node --check motion.js && node --check lighting.js"}}

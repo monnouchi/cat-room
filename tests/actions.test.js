@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {setupActions,reactionFor} from '../actions.js';
+function boot(muted=false){const events=[],timers=[],sounds=[],mute={setAttribute(){}},sound={},feed={};const gain=()=>({gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}});class Audio {currentTime=0;destination={};resume(){return Promise.resolve()}createGain(){return gain()}createOscillator(){return {frequency:{},connect(){},disconnect(){},start(){sounds.push(1)},stop(){}}}}const controls=setupActions({sound,feed,mute,onAction:kind=>events.push(kind),onMute:value=>events.push(value),initialMuted:muted,AudioContext:Audio,schedule:(fn,ms)=>timers.push({fn,ms})});return {controls,events,timers,sounds,mute,sound,feed}}
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+const time=(h,m,s=0)=>new Date(2026,9,10,h,m,s);
+test('device actions react once per cooldown and audio requires user input',async()=>{const b=boot();assert.equal(b.sounds.length,0);b.sound.onclick();b.sound.onclick();await settle();assert.deepEqual(b.events,['door']);assert.equal(b.sounds.length,2);b.feed.onclick();b.feed.onclick();assert.deepEqual(b.events,['door','food']);b.timers.find(x=>x.ms===8000).fn();assert.equal(b.feed.disabled,false)});
+test('hourly chime only after audio activation, once per crossing; no backlog',async()=>{const b=boot();b.controls.clockTick(time(8,59,59),true);b.controls.clockTick(time(9,0),true);assert.equal(b.sounds.length,0);b.sound.onclick();await settle();b.controls.clockTick(time(9,59,59),true);b.controls.clockTick(time(10,0),true);b.controls.clockTick(time(10,0,1),true);await settle();assert.equal(b.events.filter(x=>x==='hour').length,2);assert.equal(b.sounds.length,4);b.controls.clockTick(time(11,59,59),false);b.controls.clockTick(time(12,0),true);b.controls.clockTick(time(16,0),true);assert.equal(b.events.filter(x=>x==='hour').length,2)});
+test('mute persists through callback and blocks door and clock audio',async()=>{const b=boot(true);b.sound.onclick();await settle();assert.equal(b.sounds.length,0);b.controls.clockTick(time(8,59,59),true);b.controls.clockTick(time(9,0),true);await settle();assert.equal(b.sounds.length,0);b.mute.onclick();assert.equal(b.events.at(-1),false);b.controls.clockTick(time(9,59,59),true);b.controls.clockTick(time(10,0),true);await settle();assert.equal(b.sounds.length,2)});
+test('cat can ignore or only twitch; box and sleeping cat have different priorities',()=>{assert.equal(reactionFor(85,()=>.6),'ignore');assert.equal(reactionFor(20,()=>.6),'ear');assert.equal(reactionFor(60,()=>.9),'look');assert.equal(reactionFor(20,()=>.05),'ignore')});
+
+test('hour visual cue is independent of mute and audio enable, with no reload replay',()=>{
+ const b=boot(true);b.controls.clockTick(time(8,59,59),true);b.controls.clockTick(time(9,0),true);
+ b.controls.clockTick(time(9,0,1),true);assert.deepEqual(b.events,['hour']);
+ const reloaded=boot();reloaded.controls.clockTick(time(9,0,1),true);
+ reloaded.controls.clockTick(time(9,0,2),true);assert.equal(reloaded.events.length,0);
+});
